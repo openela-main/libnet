@@ -1,0 +1,205 @@
+From fdf4c18b1f2c17eddc871d4a593240a59dd0682f Mon Sep 17 00:00:00 2001
+From: Adrian Reber <areber@redhat.com>
+Date: Wed, 14 Apr 2021 09:21:50 +0200
+Subject: [PATCH 1/3] libnet_port_list.c: fix gcc -fanalyzer warning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This fixes:
+
+libnet_port_list.c:99:8: warning: leak of ‘_8’ [CWE-401] [-Wanalyzer-malloc-leak]
+   99 |     if (!all_lists)
+      |        ^
+  ‘libnet_plist_chain_new’: events 1-3
+    |
+    |   48 |     if (l == NULL)
+    |      |        ^
+    |      |        |
+    |      |        (1) following ‘false’ branch (when ‘l_70(D)’ is non-NULL)...
+    |......
+    |   53 |     if (token_list == NULL)
+    |      |     ~~ ~
+    |      |     |  |
+    |      |     |  (3) following ‘false’ branch (when ‘token_list_71(D)’ is non-NULL)...
+    |      |     (2) ...to here
+    |
+  ‘libnet_plist_chain_new’: event 4
+    |
+    |cc1:
+    | (4): ...to here
+    |
+  ‘libnet_plist_chain_new’: events 5-9
+    |
+    |   83 |     *plist = malloc(sizeof (libnet_plist_t));
+    |      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    |      |              |
+    |      |              (5) allocated here
+    |   84 |
+    |   85 |     if (!(*plist))
+    |      |        ~
+    |      |        |
+    |      |        (6) assuming ‘*plist_74(D)’ is non-NULL
+    |      |        (7) following ‘false’ branch...
+    |......
+    |   93 |     tmp = *plist;
+    |      |     ~~~
+    |      |     |
+    |      |     (8) ...to here
+    |......
+    |   99 |     if (!all_lists)
+    |      |        ~
+    |      |        |
+    |      |        (9) ‘_8’ leaks here; was allocated at (5)
+    |
+
+Signed-off-by: Adrian Reber <areber@redhat.com>
+---
+ src/libnet_port_list.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/libnet_port_list.c b/src/libnet_port_list.c
+index 942a856..a99867c 100644
+--- a/src/libnet_port_list.c
++++ b/src/libnet_port_list.c
+@@ -101,6 +101,7 @@ libnet_plist_chain_new(libnet_t *l, libnet_plist_t **plist, char *token_list)
+         all_lists = all_lists_tmp;
+         snprintf(l->err_buf, LIBNET_ERRBUF_SIZE,
+                     "libnet_build_plist_chain: realloc %s", strerror(errno));
++        free(tmp);
+         *plist = NULL;
+         return(-1);
+     }
+
+From 60d71f03f26d349b4bf069983f625128ddcfdba8 Mon Sep 17 00:00:00 2001
+From: Adrian Reber <areber@redhat.com>
+Date: Wed, 14 Apr 2021 09:41:27 +0200
+Subject: [PATCH 2/3] =?UTF-8?q?libnet=5Fpblock.c:=20fix=20warning=20"unuse?=
+ =?UTF-8?q?d=20variable=20=E2=80=98c=E2=80=99"?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Adrian Reber <areber@redhat.com>
+---
+ src/libnet_pblock.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/libnet_pblock.c b/src/libnet_pblock.c
+index fa46d35..e3eb184 100644
+--- a/src/libnet_pblock.c
++++ b/src/libnet_pblock.c
+@@ -489,7 +489,6 @@ libnet_pblock_coalesce(libnet_t *l, uint8_t **packet, uint32_t *size)
+                 {
+                     if (q->flags & LIBNET_PBLOCK_DO_CHECKSUM)
+                     {
+-                        uint32_t c;
+                         uint8_t* end = *packet + l->aligner + l->total_size;
+                         uint8_t* beg = *packet + n;
+                         int ip_offset = calculate_ip_offset(l, q);
+
+From 5085aebbe93b81eb93bfec5e33c04286f779ceda Mon Sep 17 00:00:00 2001
+From: Adrian Reber <areber@redhat.com>
+Date: Wed, 14 Apr 2021 10:13:23 +0200
+Subject: [PATCH 3/3] libnet_cq.c: fix 'dereference of possibly-NULL'
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+libnet_cq.c:139:18: warning: dereference of possibly-NULL ‘new_18’ [CWE-690] [-Wanalyzer-possible-null-dereference]
+  139 |     new->context = l;
+      |     ~~~~~~~~~~~~~^~~
+  ‘libnet_cq_add.part.0’: events 1-6
+    |
+    |   71 | libnet_cq_add(libnet_t *l, char *label)
+    |      | ^~~~~~~~~~~~~
+    |      | |
+    |      | (1) entry to ‘libnet_cq_add.part.0’
+    |......
+    |   89 |     if (label == NULL)
+    |      |        ~
+    |      |        |
+    |      |        (2) following ‘false’ branch (when ‘label_1(D)’ is non-NULL)...
+    |......
+    |   97 |     if (l_cq == NULL)
+    |      |     ~~ ~
+    |      |     |  |
+    |      |     |  (4) following ‘false’ branch...
+    |      |     (3) ...to here
+    |......
+    |  124 |     if (libnet_cq_dup_check(l, label))
+    |      |     ~~  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    |      |     |   |
+    |      |     |   (6) calling ‘libnet_cq_dup_check’ from ‘libnet_cq_add.part.0’
+    |      |     (5) ...to here
+    |
+    +--> ‘libnet_cq_dup_check’: events 7-13
+           |
+           |  269 | libnet_cq_dup_check(libnet_t *l, char *label)
+           |      | ^~~~~~~~~~~~~~~~~~~
+           |      | |
+           |      | (7) entry to ‘libnet_cq_dup_check’
+           |......
+           |  273 |     for (p = l_cq; p; p = p->next)
+           |      |                    ~  ~~~~~~~~~~~
+           |      |                    |    |
+           |      |                    |    (13) ...to here
+           |      |                    (8) following ‘true’ branch (when ‘p_6’ is non-NULL)...
+           |  274 |     {
+           |  275 |         if (p->context == l)
+           |      |         ~~ ~
+           |      |         |  |
+           |      |         |  (10) following ‘false’ branch...
+           |      |         (9) ...to here
+           |......
+           |  281 |         if (strncmp(p->context->label, label, LIBNET_LABEL_SIZE) == 0)
+           |      |         ~~ ~
+           |      |         |  |
+           |      |         |  (12) following ‘false’ branch...
+           |      |         (11) ...to here
+           |
+    <------+
+    |
+  ‘libnet_cq_add.part.0’: events 14-20
+    |
+    |  124 |     if (libnet_cq_dup_check(l, label))
+    |      |        ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    |      |        ||
+    |      |        |(14) returning to ‘libnet_cq_add.part.0’ from ‘libnet_cq_dup_check’
+    |      |        (15) following ‘false’ branch...
+    |......
+    |  130 |     new = (libnet_cq_t *)malloc(sizeof (libnet_cq_t));
+    |      |     ~~~                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    |      |     |                    |
+    |      |     |                    (17) this call could return NULL
+    |      |     (16) ...to here
+    |  131 |     if (l_cq == NULL)
+    |      |        ~
+    |      |        |
+    |      |        (18) following ‘false’ branch...
+    |......
+    |  139 |     new->context = l;
+    |      |     ~~~~~~~~~~~~~~~~
+    |      |     |            |
+    |      |     |            (20) ‘new_18’ could be NULL: unchecked value from (17)
+    |      |     (19) ...to here
+    |
+
+Signed-off-by: Adrian Reber <areber@redhat.com>
+---
+ src/libnet_cq.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/libnet_cq.c b/src/libnet_cq.c
+index 2234cbc..b3c5677 100644
+--- a/src/libnet_cq.c
++++ b/src/libnet_cq.c
+@@ -128,7 +128,7 @@ libnet_cq_add(libnet_t *l, char *label)
+     }
+ 
+     new = (libnet_cq_t *)malloc(sizeof (libnet_cq_t));
+-    if (l_cq == NULL)
++    if (new == NULL)
+     {
+         snprintf(l->err_buf, LIBNET_ERRBUF_SIZE,
+                 "%s(): can't malloc new context queue: %s",
