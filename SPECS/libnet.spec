@@ -1,7 +1,7 @@
 Summary:        C library for portable packet creation and injection
 Name:           libnet
 Version:        1.2
-Release:        6%{?dist}
+Release:        7%{?dist}
 License:        BSD
 URL:            https://github.com/libnet/libnet
 # This used to be https://github.com/libnet/libnet/releases/download/v%%{version}/%%{name}-%%{version}.tar.gz
@@ -13,6 +13,7 @@ Source0:        libnet-1.2-repack.tar.gz
 Patch0:         libnet-config.patch
 Patch1:         libnet_pblock.patch
 Patch2:         https://patch-diff.githubusercontent.com/raw/libnet/libnet/pull/120.patch
+Patch3:         https://patch-diff.githubusercontent.com/raw/libnet/libnet/pull/102.patch
 BuildRequires:  gcc
 BuildRequires:  make
 BuildRequires:  %{_bindir}/pod2man
@@ -55,6 +56,7 @@ developing applications that use libnet.
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
+%patch3 -p1
 # Avoid library soname bump (https://github.com/libnet/libnet/issues/115)
 sed -e 's/-version-info 9:0:0/-version-info 9:0:8/' -i src/Makefile.{am,in}
 
@@ -104,6 +106,10 @@ done
 %endif
 
 %changelog
+* Thu Mar 07 2024 Adrian Reber <areber@redhat.com> - 1.2-7
+- Apply upstream patch to fix 3 findings from static application security testing
+  Resolves: RHEL-27656
+
 * Mon Aug 09 2021 Mohan Boddu <mboddu@redhat.com> - 1.2-6
 - Rebuilt for IMA sigs, glibc 2.34, aarch64 flags
   Related: rhbz#1991688

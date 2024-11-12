@@ -1,0 +1,34 @@
+From 425162fb7a9577f212d44c1b6f6e2ccc36acf131 Mon Sep 17 00:00:00 2001
+From: Thomas Habets <habets@google.com>
+Date: Fri, 1 Nov 2019 17:08:08 +0000
+Subject: [PATCH] Fix possible overflows
+
+---
+ src/libnet_port_list.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/libnet_port_list.c b/src/libnet_port_list.c
+index fff151ea..942a856f 100644
+--- a/src/libnet_port_list.c
++++ b/src/libnet_port_list.c
+@@ -250,16 +250,17 @@ libnet_plist_chain_dump_string(libnet_plist_t *plist)
+     {
+         if (plist->bport == plist->eport)
+         {
+-            i = snprintf(&buf[j], BUFSIZ, "%d", plist->bport);
++            i = snprintf(&buf[j], BUFSIZ-j, "%d", plist->bport);
+         }
+         else
+         {
+-            i = snprintf(&buf[j], BUFSIZ, "%d-%d", plist->bport, plist->eport);
++            i = snprintf(&buf[j], BUFSIZ-j, "%d-%d", plist->bport, plist->eport);
+         }
+         j += i;
+         if (plist->next)
+         {
+-            snprintf(&buf[j++], BUFSIZ, ",");
++            snprintf(&buf[j], BUFSIZ-j, ",");
++            j++;
+         }
+     }
+     return (strdup(buf));       /* XXX - reentrancy == no */
